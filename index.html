@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Геолокация и Хранилища</title>
+</head>
+<body>
+    <h1>Геолокация и Хранилища</h1>
+    
+    
+    <section>
+        <h2>Определение местоположения</h2>
+        <button id="getLocationBtn">Определить местоположение</button>
+        <p id="locationOutput">Координаты: Не определены</p>
+    </section>
+
+  
+    <section>
+        <h2>Сохранение данных в LocalStorage</h2>
+        <form id="localStorageForm">
+            <input type="text" id="commentInput" placeholder="Введите комментарий" required>
+            <button type="submit">Сохранить в LocalStorage</button>
+        </form>
+        <h3>Сохраненные данные (LocalStorage):</h3>
+        <ul id="localStorageList"></ul>
+    </section>
+
+    
+    <section>
+        <h2>Сохранение данных в IndexedDB</h2>
+        <form id="indexedDBForm">
+            <input type="text" id="indexedDBComment" placeholder="Введите комментарий" required>
+            <button type="submit">Сохранить в IndexedDB</button>
+        </form>
+        <h3>Сохраненные данные (IndexedDB):</h3>
+        <ul id="indexedDBList"></ul>
+    </section>
+
+    <script>
+let currentLocation = { latitude: null, longitude: null };
+
+
+document.getElementById('getLocationBtn').addEventListener('click', () => {
+    if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(position => {
+            currentLocation.latitude = position.coords.latitude;
+            currentLocation.longitude = position.coords.longitude;
+
+            document.getElementById('locationOutput').innerText =` 
+Координаты: ${currentLocation?.latitude ?? "Неизвестно"}, ${currentLocation?.longitude ?? "Неизвестно"}`;
+        }, () => {
+            alert("Невозможно определить местоположение.");
+        });
+    } else {
+        alert("Ваш браузер не поддерживает Geolocation API.");
+    }
+});
+
+
+const localStorageForm = document.getElementById('localStorageForm');
+const localStorageList = document.getElementById('localStorageList');
+
+localStorageForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const comment = document.getElementById('commentInput').value;
+
+    if (currentLocation.latitude && currentLocation.longitude) {
+        const data = {
+            comment: comment,
+            location: currentLocation
+        };
+
+        
+        const localData = JSON.parse(localStorage.getItem('geoData')) || [];
+        localData.push(data);
+        localStorage.setItem('geoData', JSON.stringify(localData));
+
+        displayLocalStorageData();
+        localStorageForm.reset();
+    } else {
+        alert("Сначала определите местоположение!");
+    }
+});
+
+function displayLocalStorageData() {
+    localStorageList.innerHTML = '';
+    const localData = JSON.parse(localStorage.getItem('geoData')) || [];
+    localData.forEach((item, index) => {
+        const li = document.createElement('li');
+        li.textContent = `Комментарий: ${item.comment || "Без комментария"}, 
+Координаты: ${item.location?.latitude ?? "Неизвестно"}, ${item.location?.longitude ?? "Неизвестно"}`;
+        localStorageList.appendChild(li);
+    });
+}
+
+
+displayLocalStorageData();
+
+
+const dbName = "geoCommentsDB";
+let db;
+
+function initIndexedDB() {
+    const request = indexedDB.open(dbName, 1);
+
+    request.onupgradeneeded = (event) => {
+        db = event.target.result;
+        if (!db.objectStoreNames.contains('comments')) {
+            db.createObjectStore('comments', { keyPath: 'id', autoIncrement: true });
+        }
+    };
+
+    request.onsuccess = (event) => {
+        db = event.target.result;
+        displayIndexedDBData();
+    };
+
+    request.onerror = () => {
+        console.error("Ошибка при инициализации IndexedDB.");
+    };
+}
+
+const indexedDBForm = document.getElementById('indexedDBForm');
+const indexedDBList = document.getElementById('indexedDBList');
+
+indexedDBForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const comment = document.getElementById('indexedDBComment').value;
+
+    if (currentLocation.latitude && currentLocation.longitude) {
+        const data = {
+            comment: comment,
+            location: currentLocation
+        };
+
+        const transaction = db.transaction(['comments'], 'readwrite');
+        const store = transaction.objectStore('comments');
+        store.add(data);
+
+        transaction.oncomplete = () => {
+            displayIndexedDBData();
+            indexedDBForm.reset();
+        };
+
+        transaction.onerror = () => {
+            console.error("Ошибка при добавлении данных в IndexedDB.");
+        };
+    } else {
+        alert("Сначала определите местоположение!");
+    }
+});
+
+function displayIndexedDBData() {
+    indexedDBList.innerHTML = '';
+    const transaction = db.transaction(['comments'], 'readonly');
+    const store = transaction.objectStore('comments');
+    const request = store.getAll();
+
+    request.onsuccess = (event) => {
+        const data = event.target.result;
+        data.forEach(item => {
+            const li = document.createElement('li');
+            li.textContent = `Комментарий: ${item.comment || "Без комментария"}, 
+Координаты: ${item.location?.latitude ?? "Неизвестно"}, ${item.location?.longitude ?? "Неизвестно"}`;
+            indexedDBList.appendChild(li);
+        });
+    };
+
+    request.onerror = () => {
+        console.error("Ошибка при получении данных из IndexedDB.");
+    };
+}
+
+
+initIndexedDB();
+    </script>
+</body>
+</html>
